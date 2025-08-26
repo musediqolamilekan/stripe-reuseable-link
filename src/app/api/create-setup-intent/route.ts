@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2025-07-30.basil",
+  apiVersion: "2025-07-30.basil", // use real supported version
 });
 
 export async function POST(req: Request) {
@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     if (!customer) {
       customer = await stripe.customers.create({
         email,
-        name: company, // company name here
+        name: company,
         metadata: { company },
       });
     }
@@ -27,8 +27,13 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ clientSecret: setupIntent.client_secret });
-  } catch (err: any) {
-    console.error("Stripe error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    if (err instanceof Error) {
+      console.error("Stripe error:", err.message);
+      return NextResponse.json({ error: err.message }, { status: 500 });
+    }
+
+    console.error("Unknown error:", err);
+    return NextResponse.json({ error: "Unexpected error occurred" }, { status: 500 });
   }
 }
