@@ -15,88 +15,100 @@ export default function PaymentInfoPage() {
   });
 
   const validateEmail = (email: string) => {
-    // Ensure the email is a business email (not personal)
     const businessEmailPattern = /^[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.)+(com|org|net|edu|gov)$/;
     return businessEmailPattern.test(email);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  const email = (document.getElementById("email") as HTMLInputElement).value;
-  const company = (document.getElementById("company") as HTMLInputElement).value;
+    const email = (document.getElementById("email") as HTMLInputElement).value;
+    const company = (document.getElementById("company") as HTMLInputElement).value;
 
-  // Validation logic
-  let valid = true;
-  const errors = {
-    email: "",
-    company: "",
-  };
+    let valid = true;
+    const errors = {
+      email: "",
+      company: "",
+    };
 
-  if (!email || !validateEmail(email)) {
-    errors.email = "Please enter a valid business email.";
-    valid = false;
-  }
-  if (!company) {
-    errors.company = "Company name is required.";
-    valid = false;
-  }
-
-  setFormErrors(errors);
-
-  if (!valid) return; // Stop the process if there's an error
-
-  setLoading(true);
-  setError("");
-
-  try {
-    // ✅ Send email + company to backend
-    const res = await fetch("/api/create-setup-intent", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, company }),
-    });
-
-    if (!res.ok) {
-      throw new Error("Failed to create setup intent");
+    if (!email || !validateEmail(email)) {
+      errors.email = "Please enter a valid business email.";
+      valid = false;
+    }
+    if (!company) {
+      errors.company = "Company name is required.";
+      valid = false;
     }
 
-    const { clientSecret } = await res.json();
+    setFormErrors(errors);
 
-    if (!stripe) {
-      setError("Stripe.js has not loaded yet. Please try again in a moment.");
-      setLoading(false);
-      return;
-    }
+    if (!valid) return;
 
-    if (!elements) {
-      setError("Stripe Elements has not loaded yet. Please try again in a moment.");
-      setLoading(false);
-      return;
-    }
+    setLoading(true);
+    setError("");
 
-    const result = await stripe.confirmCardSetup(clientSecret, {
-      payment_method: {
-        card: elements.getElement(CardElement)!,
-        billing_details: {
-          email,
-          name: company, // using company name as "name"
+    try {
+      const res = await fetch("/api/create-setup-intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to create setup intent");
+      }
+
+      const { clientSecret } = await res.json();
+
+      if (!stripe) {
+        setError("Stripe.js has not loaded yet. Please try again.");
+        setLoading(false);
+        return;
+      }
+
+      if (!elements) {
+        setError("Stripe Elements has not loaded yet. Please try again.");
+        setLoading(false);
+        return;
+      }
+
+      const result = await stripe.confirmCardSetup(clientSecret, {
+        payment_method: {
+          card: elements.getElement(CardElement)!,
+          billing_details: {
+            email,
+            name: company,
+          },
         },
-      },
-    });
+      });
 
-    if (result.error) {
-      setError(result.error.message || "Something went wrong.");
-    } else {
+      if (result.error) {
+        setError(result.error.message || "Something went wrong.");
+        setLoading(false);
+        return;
+      }
+
+      const saveRes = await fetch("/api/save-customer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          company,
+          paymentMethodId: result.setupIntent.payment_method,
+        }),
+      });
+
+      if (!saveRes.ok) {
+        throw new Error("Failed to save customer with payment method");
+      }
+
       setSuccess(true);
+    } catch (err) {
+      console.error(err);
+      setError("Unexpected error. Try again.");
     }
-  } catch (err) {
-    console.error(err);
-    setError("Unexpected error. Try again.");
-  }
 
-  setLoading(false);
-};
+    setLoading(false);
+  };
 
   if (success) {
     return (
@@ -164,7 +176,7 @@ export default function PaymentInfoPage() {
               <input
                 type="text"
                 id="company"
-                placeholder="Widgion Inc."
+                placeholder="Your Company Name"
                 required
                 className="w-full border border-gray-300 pl-10 pr-3 py-3 rounded text-[#121212] focus:ring-2 focus:ring-[#635BFF] focus:border-[#635BFF] sm:text-sm"
               />
